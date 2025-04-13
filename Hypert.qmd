@@ -1,0 +1,560 @@
+---
+title: "BMI and Hypertension prevalence"
+author: "Group Assignment"
+format: docx
+editor: visual
+---
+
+## Study objective
+
+The main objective of the study is to analyze the correlation between BMI and the prevalence of hypertension among adults in different age groups.
+
+## 1. Loading the required libraries
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(e1071)
+library(psych)
+library(mice)
+library(VIM)
+library(metan)
+library(DescTools)
+library(flextable)
+library(ggcorrplot)
+library(PerformanceAnalytics)
+library(glue)
+library(GGally)
+library(dlookr)
+```
+
+## 2. Importing the data set
+
+```{r}
+Hypertension <- read.csv("E:/data sets/Hypertension.csv")
+```
+
+```{r}
+# Viewing the first 5 variables
+Hypertension %>% 
+  head(5) %>% 
+  gt() %>% 
+  gt_theme_guardian() %>% 
+  tab_header(title = "Hypertension first characters")
+```
+
+```{r}
+# Viewing the last 5 variables
+Hypertension %>% 
+  tail(5) %>% 
+  gt() %>% 
+  gt_theme_guardian() %>% 
+  tab_header(title = "Hypertension last characters")
+```
+
+```{r}
+# data types
+str(Hypertension)
+```
+
+### Adding age group variable to the entire data set
+
+```{r}
+Hypertension <- Hypertension %>% 
+  mutate(age_group = case_when(
+    age >= 0 & age < 17.9 ~ "Child",
+    age >= 18 & age < 45.9 ~ "Adult",
+    age >= 46 & age < 59.9 ~ "Middle aged",
+    TRUE ~  "Senior"
+  ))
+```
+
+### Adding BMI category to the entire data set
+
+```{r}
+Hypertension <- Hypertension %>% 
+ mutate(bmi_group = case_when(
+    BMI  < 18.5 ~ "Underweight",
+    BMI >= 18.5 & BMI <= 24.9 ~ "Normalweight",
+    BMI >= 25 & BMI <= 29.9 ~ "Overweight",
+    TRUE ~  "Obese"
+  ))
+```
+
+### Adding other columns **(agegroup and bmigroup)**
+
+```{r}
+Hypertension <-Hypertension %>% 
+  mutate(agegroup= case_when(age_group == "Child" ~ "0",
+                         age_group ==  "Adult" ~ "1",
+                         age_group == "Middle aged" ~ "2",
+                         TRUE ~ "3")) %>% 
+  mutate(bmigroup = case_when(bmi_group == "Underweight" ~ "0",
+                               bmi_group == "Normalweight" ~ "1",
+                               bmi_group == "Overweight" ~ "2",
+                         TRUE ~ "3"))
+```
+
+```{r}
+Hypertension<-Hypertension %>%  
+mutate(Hypertension_risk = factor(Hypertensionrisk,
+                          levels = c(0 ,1),
+                          labels = c("No",
+                                     "Yes"))) 
+```
+
+### Preparing for plots
+
+```{r}
+theme_set(theme_bw()+
+            theme(title = element_text(color = "#4CBB17",
+                                       size = 18,
+                                       face = "bold"),
+                  axis.text = 
+                    element_text(size = 10,
+                                 color = "#6495ED",
+                                 face = "bold"),
+                  axis.title = element_text(size = 12,
+                                            face = "bold",
+                                            colour = "#FF5733")))
+```
+
+## 3. Data cleaning
+
+### Calculating the percentage of missing values
+
+```{r}
+p <- function(Hypertension) {sum(is.na(Hypertension))/length(Hypertension)* 100}
+apply(Hypertension,2,p)
+```
+
+It can be evidently seen that 0.448% of BMI has missing values
+
+### Dealing with the missing data
+
+```{r}
+# visualizing the proportion of missing values
+aggr(Hypertension)
+```
+
+```{r,message=FALSE,warning=FALSE}
+# applied predictive mean matching (pmm) for BMI 
+new_Hypertension <-mice(Hypertension, seed = 300)
+```
+
+```{r}
+# Getting the structure of the imputed data set
+attributes(new_Hypertension)
+```
+
+### Getting the new complete data set
+
+```{r}
+# getting the new complete dataset
+Hypertensionn <- complete(new_Hypertension)
+```
+
+### Changing the bmi_group and age_group to factor
+
+```{r}
+Hypertensionn$bmi_group <- as.factor(Hypertensionn$bmi_group)
+```
+
+```{r}
+Hypertensionn$age_group <- as.factor(Hypertensionn$age_group)
+```
+
+### Creating levels in the BMI variable
+
+```{r}
+Hypertensionn$bmi_group<- factor((Hypertensionn$bmi_group), levels = c("Obese",
+                                                                       "Overweight",
+                                                                       "Normalweight",
+                                                                       "Underweight"))
+                                                                       
+```
+
+### Creating levels in the age group variable
+
+```{r}
+Hypertensionn$age_group<- factor((Hypertensionn$age_group), levels = c("Child",
+                                                                       "Adult",
+                                                                       "MiddleAged",
+                                                                       "Senior",
+                                                                       "Unknown"))
+                 
+```
+
+### Dealing with outliers
+
+#### We will check for outliers in the age variable
+
+```{r}
+Hypertensionn %>%
+  mutate(Hypertensionrisk = factor(Hypertensionrisk,
+                          levels = c(0 ,1),
+                          labels = c("No",
+                                     "Yes"))) %>% 
+  ggplot(aes(Hypertensionrisk,age))+
+  geom_boxplot(aes(fill = Hypertensionrisk ),show.legend = F)+
+  labs(title = "Boxplot of Age")
+```
+
+It can be evidently seen as per the plot that age has NO outliers
+
+#### Checking for outliers in the systolic blood pressure variable
+
+```{r}
+Hypertensionn %>%
+  mutate(Hypertensionrisk = factor(Hypertensionrisk,
+                          levels = c(0 ,1),
+                          labels = c("No",
+                                     "Yes"))) %>% 
+  ggplot(aes(Hypertensionrisk,sysBP))+
+  geom_boxplot(aes(fill = Hypertensionrisk ),show.legend = F)+
+  labs(title = "Boxplot of Systolic Blood pressure")
+```
+
+It can be seen that systolic blood pressure has outliers, we will winsorize the outliers
+
+```{r}
+# winsorizing the systolic blood pressure in order to reduce the outliers
+SysBpwinsorize<- Winsorize(Hypertensionn$sysBP, probs = c(0.05,0.95), na.rm = T, type = 1)
+Hypertensionn$sysBP<- SysBpwinsorize
+```
+
+#### Checking for outliers in the diastolic blood pressure variable
+
+```{r}
+Hypertensionn %>%
+  mutate(Hypertensionrisk = factor(Hypertensionrisk,
+                          levels = c(0 ,1),
+                          labels = c("No",
+                                     "Yes"))) %>% 
+  ggplot(aes(Hypertensionrisk,diaBP))+
+  geom_boxplot(aes(fill = Hypertensionrisk ),show.legend = F)+
+  labs(title = "Boxplot of Diastolic Blood pressure")
+```
+
+It can be seen from the above plot that Diastolic blood pressure has outliers, we will winsorize the outliers
+
+```{r}
+# winsorizing the diastolic blood pressure in order to reduce the outliers
+DiaBpwinsorize<- Winsorize(Hypertensionn$diaBP, probs = c(0.05,0.95), na.rm = T, type = 1)
+Hypertensionn$diaBP<- DiaBpwinsorize
+```
+
+#### Checking for outliers in the BMI variable
+
+```{r}
+Hypertensionn %>%
+  mutate(Hypertensionrisk = factor(Hypertensionrisk,
+                          levels = c(0 ,1),
+                          labels = c("No",
+                                     "Yes"))) %>% 
+  ggplot(aes(Hypertensionrisk,BMI))+
+  geom_boxplot(aes(fill = Hypertensionrisk ),show.legend = F)+
+  labs(title = "Boxplot of BMI")
+```
+
+From the above plot the variable BMI contains outliers, we will winsorize it.
+
+```{r}
+# winsorizing the diastolic blood pressure in order to reduce the outliers
+BMIwinsorize<- Winsorize(Hypertensionn$BMI, probs = c(0.05,0.95), na.rm = T, type = 1)
+Hypertensionn$BMI<- BMIwinsorize
+```
+
+## 4. Descriptive statistics
+
+### Age Group Distribution and Hypertension prevalence
+
+```{r}
+Hypertensionn %>%
+ mutate(age_group = case_when(
+    age >= 0 & age < 17.9 ~ "Child",
+    age >= 18 & age < 45.9 ~ "Adult",
+    age >= 46 & age < 59.9 ~ "Middle aged",
+    TRUE ~ "Senior"
+  )) %>% 
+  mutate(Hypertensionrisk = factor(Hypertensionrisk,
+                          levels = c(0 ,1),
+                          labels = c("No",
+                                     "Yes"))) %>% 
+  
+  ggplot(aes(age_group))+
+  geom_bar(aes(fill = Hypertensionrisk), position = "dodge", stat = "count", show.legend = T,alpha = .5)+
+  labs(title = "Bar plot of Age group and \n Hypertension risk",
+       x = "Age group",
+       y = "Counts",
+       fill = "Hypertension \n risk")+
+  theme(legend.position = "bottom")
+
+```
+
+```{r}
+## Grouping by the age group
+Hypertensionn %>%
+  mutate(Hypertensionrisk = factor(Hypertensionrisk,
+                          levels = c(0 ,1),
+                          labels = c("No",
+                                     "Yes"))) %>%
+  group_by(age_group) %>% 
+  count(Hypertensionrisk) %>% head(5)
+```
+
+### BMI Distribution
+
+```{r}
+quantile(Hypertensionn$BMI, c(0.1,0.2,0.30,0.4,0.5,0.6,0.7,0.8,0.9,0.95))
+shapiro.test(Hypertensionn$BMI) # checking the normality
+```
+
+BMI variable is'nt normally distributed because the p-value is less than 0.05.
+
+```{r, warning=FALSE}
+## BMI Historam
+Hypertensionn %>% 
+  ggplot(aes(BMI))+
+  geom_histogram(binwidth = 3, fill = "#EE82EE")+
+  geom_vline(aes(xintercept = mean(BMI)), color = "red", size = 1.0, linetype = "dashed")+
+  annotate("text",x = 25.5, y = 1200,
+           label = paste("Mean \n ", round(mean(Hypertensionn$BMI),2)),
+           color = "darkred",
+           size = 5)+
+  annotate("text",x = 40, y = 1200,
+           label = paste("Skewness \n ", round(skewness(Hypertensionn$BMI),3)),
+           color = "navyblue",
+           size = 3)+
+  annotate("text",x = 40, y = 1000,
+           label = paste("Kurtosis \n ", round(kurtosis(Hypertensionn$BMI),3)),
+           color = "red",
+           size = 3)+
+  labs(title = "Histogram of BMI",
+       x = "BMI",
+       y = NULL)
+
+```
+
+### Bar plot distribution of BMI group and hypertension prevalence
+
+```{r,warning=FALSE}
+Hypertensionn %>% 
+     mutate(bmi_group = case_when(
+    BMI  < 18.5 ~ "Underweight",
+    BMI >= 18.5 & BMI <= 24.9 ~ "Normalweight",
+    BMI >= 25 & BMI <= 29.9 ~ "Overweight",
+    TRUE ~  "Obese"
+  )) %>% 
+   mutate(Hypertensionrisk = factor(Hypertensionrisk,
+                          levels = c(0 ,1),
+                          labels = c("No",
+                                     "Yes"))) %>% 
+  
+  ggplot(aes(bmi_group))+
+  geom_bar(aes(fill = Hypertensionrisk), position = "dodge", stat = "count", show.legend = T,alpha = .7)+
+  labs(title = "Bar plot of BMI group and \n Hypertension risk",
+       x = "BMI group",
+       y = "Counts",
+       fill = "Hypertension \n risk")+
+  theme(legend.position = "bottom")
+  
+```
+
+```{r}
+## Grouping by BMI Group
+Hypertensionn %>%
+  mutate(Hypertensionrisk = factor(Hypertensionrisk,
+                          levels = c(0 ,1),
+                          labels = c("No",
+                                     "Yes"))) %>%
+  group_by(bmi_group) %>% 
+  count(Hypertensionrisk) %>% head(5)
+```
+
+### Age Distribution
+
+```{r}
+quantile(Hypertensionn$age, c(0.1,0.2,0.30,0.4,0.5,0.6,0.7,0.8,0.9,0.95))
+shapiro.test(Hypertensionn$age) # checking the normality
+```
+
+Age is not normally distributed since the p-value is less than 0.05
+
+```{r}
+Hypertensionn %>% 
+  ggplot(aes(age))+
+  geom_histogram(binwidth = 3, fill = "#EE82EE")+
+  geom_vline(aes(xintercept = mean(age)), color = "red", size = 1.0, linetype = "dashed")+
+  annotate("text",x = 50, y = 500,
+           label = paste("Mean \n ", round(mean(Hypertensionn$age),2)),
+           color = "darkred",
+           size = 5)+
+  annotate("text",x = 80, y = 500,
+           label = paste("Skewness \n ", round(skewness(Hypertensionn$age),3)),
+           color = "navyblue",
+           size = 3)+
+  annotate("text",x = 80, y = 450,
+           label = paste("Kurtosis \n ", round(kurtosis(Hypertensionn$age),3)),
+           color = "red",
+           size = 3)+
+  labs(title = "Histogram of Age",
+       x = "Age",
+       y = NULL)
+
+```
+
+## 5. Correlation analysis
+
+```{r}
+corr <-Hypertensionn %>%
+  select(heartRate,BMI, Hypertensionrisk,age) 
+
+ggcorrplot(cor(corr), title = "CORRELOGRAM", 
+           legend.title = "Pearson Correlation" , lab =  TRUE,
+           lab_col = "black",
+           lab_size = 3, ggtheme = theme_bw,
+           outline.color = "black",
+           colors = c("white", "blue", "darkred"))
+
+```
+
+### Correlation analysis in each age group separately with Hypertension and BMI
+
+```{r}
+hypert<- Hypertensionn %>% 
+  group_by(age_group, BMI) %>% 
+  summarise(Prevalent = mean(Hypertensionrisk)*100, .groups = "drop")
+hypertent<- hypert %>% 
+  group_by(age_group) %>% 
+  summarise(correlation = cor(BMI,Prevalent)) 
+print(hypertent)
+```
+
+Their is a weak correlation between the **adult age** group between BMI and Hypertension with **r = 0.4421.**
+
+Their is also a weak correlation in the Middle Age Group and the Senior age Group with **r = 0.3793 and r = 0.3067 respectively.**
+
+```{r}
+chart.Correlation(Hypertensionn[, 1:7])
+```
+
+We use the non parametric test since the data isn't normally disributed
+
+```{r,warning=FALSE}
+ggpairs(Hypertensionn,
+        columns = 1:7,
+        aes(colour = bmi_group),
+        lower = list(continuous = "smooth"),
+        upper = list(continuous = wrap("cor",
+                                       method = "kendal")))
+```
+
+Checking for the normality
+
+```{r}
+Hypertensionn %>% 
+  group_by(bmi_group) %>% 
+  select(1:7, 9) %>% 
+  normality() %>% 
+  mutate(across(is.numeric, ~round(., 3))) %>% 
+  regulartable()
+```
+
+```{r}
+
+
+```
+
+```{r}
+Hypertensionn %>% 
+  ggplot(aes(x = BMI, y = Hypertensionrisk, color = age_group))+
+  geom_jitter()+
+  labs( title = "BMI and Hypertension by \n Age group",
+        x = "BMI",
+        y = "Hypertension ",
+        color = "Age Group")+
+  theme(legend.position = "bottom")
+```
+
+### A scatter plot of Age and BMI faceted by gender
+
+```{r}
+Hypertensionn %>%
+   mutate(gender = factor(gender,
+                          levels = c(0 ,1),
+                          labels = c("Female",
+                                     "Male"))) %>%
+  ggplot(aes(x = age, 
+             y = BMI,
+             color = Hypertensionrisk))+
+  facet_wrap(~gender)+
+  geom_jitter(size = 3,
+              alpha = .5,show.legend = F)+
+  labs(title = "Age and BMI ",
+       x= "Age",
+       y = "BMI")
+```
+
+## 6. Data Visualization
+
+### A line graph to show how Hypertension prevalence increases with BMI across different Age Groups
+
+```{r}
+hypertension_prevalence <- Hypertensionn %>% 
+  group_by(age_group, bmi_group) %>% 
+  summarise(Prevalence = mean(Hypertensionrisk)* 100, .groups = "drop")
+
+hypertension_prevalence %>% 
+  ggplot(aes(bmi_group, Prevalence, group = age_group, color = age_group))+
+  geom_line()+
+  geom_point()+
+  labs(title = "Hypertension Prevalence by BMI \n Across Age groups",
+       x = "BMI",
+       y = "Hypertension Prevalence (%)")+
+  theme(legend.position = "bottom")
+```
+
+From the graph it can be evidently seen that Hypertension prevalence is high in Obese and the Senior age group (60 Years and above)
+
+### A line graph to show how Hypertension prevalence increases with BMI across different BMI Groups
+
+```{r}
+hypertension_prevalent <- Hypertensionn %>% 
+  group_by(age_group, bmi_group) %>% 
+  summarise(Prevalenc = mean(Hypertensionrisk)* 100, .groups = "drop")
+
+hypertension_prevalent %>% 
+  ggplot(aes(age_group, Prevalenc, group = bmi_group, color = bmi_group))+
+  geom_line()+
+  geom_point()+
+  labs(title = "Hypertension Prevalence by BMI \n Across BMI groups",
+       x = "Age Group",
+       y = "Hypertension Prevalence (%)")+
+  theme(legend.position = "bottom")
+```
+
+Also from the graph its evident that Obese individuals have high Hypertention prevalence
+
+## 7. Conclusion
+
+In this study, their is a varying relationship between BMI and Hypertension prevalence across age groups. In the adult age group **(18-45.9 years)**, BMI had a weak correlation with Hypertension. The middle aged**(46-59.9 years)** and senior age group**(above 60 years)** similarly had a weak correlation.
+
+From this Data set BMI seems to be a less reliable indicator in Older Adults.
+
+From the analysis their seems to be other dominant risk factors that influence Hypertension Prevalence, other than BMI.
+
+A low correlation between BMI and Hypertension Prevalence inn seniors could result from multiple factors, such as their influence of other health conditions, the less reliable nature of BMI in older adults, or the presence of other risk factors like: Heart disease and smoking.
+
+However, a line graph shows that Hypertension Prevalence is **higher** in the Obese individuals, followed by Overweight, Normal weight and Under weight respectively.
+
+The line Graph also shows that The Hypertension Prevalence is **Higher** in senior individuals(greater than 60 years), followed by Middle aged(46-59.9 years), Adults(18-45.9 years) and then Children respectively.(0-17.9 years)
+
+## Recommendations
+
+Given the low correlation between BMI and hypertension in seniors, its important to recognize that BMI alone isn't a sufficient predictor of Hypertension in this Population. Therefore the focus should shift to other factors that may contribute to Hypertension in older adults, for example: Heart disease, Diabetes and smoking.
+
+### Action:
+
+1.  A further research should be carried out in order to understand in in-depth these other risk factors.
+
+2.  Promoting education on Hypertension risk factors and implement target intervention among the senior age group.
